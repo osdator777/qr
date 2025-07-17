@@ -8,6 +8,19 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-white flex flex-col h-screen">
+  <script>
+    if (!localStorage.getItem('currentUser')) {
+      window.location.href = 'login.html';
+    }
+    function logout() {
+      localStorage.removeItem('currentUser');
+      location.href = 'login.html';
+    }
+  </script>
+
+  <div class="text-right p-2">
+    <button onclick="logout()" class="bg-red-600 px-3 py-1 rounded">Salir</button>
+  </div>
 
   <div id="app" class="relative flex-1 flex flex-col">
     <!-- Selector de cámara (mejorado para móvil) -->
