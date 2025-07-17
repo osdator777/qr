@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Scan App</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white flex flex-col h-screen">
+
+  <div id="app" class="relative flex-1 flex flex-col">
+    <!-- Selector de cámara (mejorado para móvil) -->
+    <div v-if="devices.length > 1" class="p-4 bg-gray-800">
+      <label for="cameraSelect" class="block mb-2 text-sm font-medium text-gray-300">Seleccionar Cámara:</label>
+      <!-- Estilos mejorados para que sea más grande y usable en móvil -->
+      <select id="cameraSelect" v-model="selectedDeviceId"
+              class="bg-gray-700 border border-gray-600 text-white text-base rounded-lg block w-full p-3 focus:ring-blue-500 focus:border-blue-500">
+        <option v-for="d in devices" :key="d.deviceId" :value="d.deviceId">
+          {{ d.label || 'Cámara ' + d.deviceId }}
+        </option>
+      </select>
+    </div>
+
+    <!-- Escáner QR con eventos para permiso y errores -->
+    <qrcode-stream
+      @detect="onDetect"
+      :paused="pauseScan"
+      :constraints="constraints"
+      @camera-on="onCameraOn"
+      @error="onCameraError"
+      class="flex-1"
+    ></qrcode-stream>
+
+    <!-- Carga / Mensajes -->
+    <div v-if="loading" class="absolute inset-0 bg-slate-900/80 flex items-center justify-center">
+      <p class="bg-slate-700 px-4 py-2 rounded">Iniciando cámara...</p>
+    </div>
+    <transition name="fade">
+      <div v-if="msg.text" class="absolute bottom-4 inset-x-0 text-center">
+        <p :class="msg.ok ? 'bg-emerald-600' : 'bg-red-600'"
+           class="inline-block px-4 py-2 rounded text-white">
+          {{ msg.text }}
+        </p>
+      </div>
+    </transition>
+  </div>
+
+  <!-- Dependencias -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/vue-qrcode-reader@5.5.4/dist/vue-qrcode-reader.umd.js"></script>
+
+  <script>
+    // store.js - Persistencia en localStorage
+    const store = (() => {
+      const KEY = 'qr-scans';
+      const load = () => JSON.parse(localStorage.getItem(KEY) || '[]');
+      const save = arr => localStorage.setItem(KEY, JSON.stringify(arr));
+      let items = load();
+      return {
+        exists: ({ userId, order, datetime }) =>
+          items.some(r => r.userId === userId && r.order === order && r.datetime === datetime),
+        add: rec => { items.push(rec); save(items); },
+        getAll: () => items
+      };
+    })();
+
+    // scan.js - Lógica del escáner
+    ;(() => {
+      const { createApp, ref, reactive, watch, onMounted } = Vue;
+      const { QrcodeStream } = VueQrcodeReader;
+
+      createApp({
+        components: { QrcodeStream },
+        setup() {
+          const msg = ref({ text: '', ok: true });
+          const pauseScan = ref(false);
+          const loading = ref(true);
+          const devices = ref([]);
+          const selectedDeviceId = ref(null);
+
+          // Constraints dinámicos. Empezamos pidiendo la cámara trasera.
+          const constraints = reactive({ facingMode: { ideal: 'environment' } });
+
+          // Función para enumerar y actualizar la lista de cámaras
+          async function updateDevices() {
+            try {
+              const all = await navigator.mediaDevices.enumerateDevices();
+              devices.value = all.filter(d => d.kind === 'videoinput');
+              
+              // Si no hay un dispositivo seleccionado, intentar preseleccionar la trasera.
+              if (!selectedDeviceId.value && devices.value.length > 0) {
+                 const backCamera = devices.value.find(d => /back|rear|environment/i.test(d.label));
+                 // El `v-model` se actualizará automáticamente si una cámara ya está activa.
+                 // Si no, establecemos la trasera o la primera como fallback.
+                 selectedDeviceId.value = backCamera?.deviceId || devices.value[0]?.deviceId;
+              }
+
+            } catch (e) {
+              msg.value = { text: 'No se pueden listar las cámaras.', ok: false };
+              console.error('Error al enumerar dispositivos:', e);
+            }
+          }
+          
+          // Observar cambios en el selector de cámara
+          watch(selectedDeviceId, id => {
+            if (id) {
+              loading.value = true;
+              // Actualiza la constraint para usar el deviceId exacto.
+              constraints.facingMode = undefined;
+              constraints.deviceId = { exact: id };
+            }
+          });
+          
+          // Evento: la cámara se ha encendido correctamente
+          function onCameraOn(capabilities) {
+            loading.value = false;
+            // AHORA, con el permiso concedido, podemos obtener la lista de cámaras.
+            updateDevices(); 
+          }
+          
+          // Evento: error de cámara
+          function onCameraError(error) {
+            loading.value = false;
+            let errorText = 'Error desconocido de la cámara.';
+            if (error.name === 'NotAllowedError') {
+              errorText = 'Permiso denegado. Por favor, activa la cámara en los ajustes de tu navegador.';
+            } else if (error.name === 'NotFoundError') {
+              errorText = 'No se encontró ninguna cámara en este dispositivo.';
+            } else if (error.name === 'OverconstrainedError') {
+              errorText = 'La cámara solicitada no está disponible.';
+            } else {
+              errorText = `Error de cámara: ${error.message}`;
+            }
+            msg.value = { text: errorText, ok: false };
+            console.error('Error de cámara:', error);
+          }
+
+          // Evento: QR detectado
+          function onDetect(detectedCodes) {
+            const raw = detectedCodes[0]?.rawValue;
+            if (!raw) return;
+            
+            let data;
+            try {
+              data = parsePayload(raw);
+            } catch (e) {
+              return flash('Código QR con formato inválido.', false);
+            }
+
+            if (!data) { return flash('Formato de datos inválido.', false); }
+            if (store.exists(data)) { return flash('Este QR ya ha sido escaneado.', false); }
+            
+            store.add(data);
+            flash('¡Escaneo guardado correctamente!', true);
+          }
+
+          function flash(text, ok) {
+            msg.value = { text, ok };
+            pauseScan.value = true;
+            setTimeout(() => { msg.value.text = ''; pauseScan.value = false; }, 2000);
+            if (navigator.vibrate) {
+              navigator.vibrate(ok ? 100 : [150, 50, 150]);
+            }
+          }
+
+          return { msg, pauseScan, loading, constraints, devices, selectedDeviceId,
+                   onCameraOn, onCameraError, onDetect };
+        }
+      }).mount('#app');
+
+      // Helper: parsea UID, ORDER y DATETIME
+      function parsePayload(raw) {
+        const m = /UID:(\w+)\|ORDER:(\d+)\|DATETIME:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/.exec(raw);
+        if (!m) return null;
+        return { 
+          userId: m[1], 
+          order: m[2], 
+          datetime: m[3], 
+          scannedAt: new Date().toISOString() 
+        };
+      }
+    })();
+  </script>
+
+  <style>
+    .fade-enter-active, .fade-leave-active { transition: opacity .3s ease; }
+    .fade-enter-from, .fade-leave-to { opacity: 0; }
+  </style>
+</body>
+</html>
