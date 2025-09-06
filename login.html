@@ -85,9 +85,10 @@
                         localStorage.setItem('logisticaUser', JSON.stringify(result.user));
                         
                         // Redirigir según el rol
-                        if (result.user.role === 'admin') {
+                        const r = result.user.role;
+                        if (r === 'admin') {
                             window.location.href = 'admin-panel.html';
-                        } else if (result.user.role === 'operator') {
+                        } else {
                             window.location.href = 'app-scanner.html';
                         }
 

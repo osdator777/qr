@@ -96,6 +96,42 @@
             </div>
         </div>
 
+        <!-- Bottom sheet de acciones -->
+        <div v-if="actionSheet.open" class="fixed inset-0 bg-black/60 z-50 flex items-end" @click="closeActionSheet">
+            <div class="bg-slate-800 w-full rounded-t-2xl p-6 space-y-4" @click.stop>
+                <h3 class="text-lg font-semibold">Acciones disponibles</h3>
+
+                <!-- Formulario de logística -->
+                <div v-if="currentRole==='logistica' && actionSheet.kind==='DN'" class="space-y-3">
+                    <div>
+                        <label class="block text-sm mb-1">Tipo de palet</label>
+                        <select v-model="logisticsForm.pallet_type" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2">
+                            <option>Euro</option>
+                            <option>Americano</option>
+                            <option>Otro</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-1">Altura (m)</label>
+                        <input v-model="logisticsForm.height_m" type="number" step="0.01" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2"/>
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-1">Ubicación</label>
+                        <input v-model="logisticsForm.location" type="text" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2"/>
+                    </div>
+                    <button class="mt-2 w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-3 font-semibold" @click="performAction('LOG_INPUT')">Guardar logística</button>
+                </div>
+
+                <!-- Botones de acciones estándar -->
+                <div v-else>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button v-for="a in availableActions()" :key="a.key" class="bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-3 font-semibold" @click="performAction(a.key)">{{ a.label }}</button>
+                    </div>
+                    <div v-if="availableActions().length===0" class="text-slate-300">No hay acciones para tu rol.</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Notificaciones -->
         <transition name="fade"><div v-if="message.text" class="fixed bottom-6 left-4 right-4 z-50"><div :class="['p-4 rounded-xl shadow-2xl text-white font-medium text-center', message.success ? 'bg-green-500' : 'bg-red-500', message.success ? '' : 'vibrate']"><div class="flex items-center justify-center space-x-2"><svg v-if="message.success" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><span>{{ message.text }}</span></div></div></div></transition>
         
@@ -138,11 +174,15 @@
                 // --- PROTECCIÓN DE RUTA Y DATOS DE SESIÓN ---
                 const isLoggedIn = ref(false);
                 const currentUserId = ref('');
+                const currentRole = ref('');
+                const actionSheet = ref({ open: false });
+                const logisticsForm = reactive({ pallet_type: 'Euro', height_m: '', location: '' });
                 (() => {
                     const sessionData = JSON.parse(localStorage.getItem('logisticaUser'));
                     if (!sessionData) { window.location.href = 'login.html'; return; }
                     isLoggedIn.value = true;
                     currentUserId.value = sessionData.username;
+                    currentRole.value = sessionData.role;
                 })();
 
                 // --- ESTADOS REACTIVOS ---
@@ -205,20 +245,8 @@
                     try {
                         const data = parseQRPayload(rawValue);
                         if (!data) throw new Error('Código QR con formato no válido.');
-                        
-                        data.userId = currentUserId.value; 
-
-                        const response = await fetch('api/scan.php', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(data)
-                        });
-
-                        const result = await response.json();
-                        if (!response.ok) throw new Error(result.message || 'Error del servidor.');
-                        
-                        showMessage(`✅ ${result.message}`, true);
-
+                        actionSheet.value = { open: true, ...data };
+                        Object.assign(logisticsForm, { pallet_type: 'Euro', height_m: '', location: '' });
                     } catch (error) {
                         showMessage(`⚠️ ${error.message}`, false);
                     }
@@ -262,9 +290,66 @@
                 }
 
                 function parseQRPayload(raw) {
-                    const match = /UID:(\w+)\|ORDER:(\w+)\|DATETIME:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/.exec(raw);
-                    if (!match) return null;
-                    return { order: match[2], datetime: match[3] };
+                    const m = /^LF1\.(ORDER|DN)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{6,})\.(\d{10})\.([A-Fa-f0-9]{32,})$/.exec(raw);
+                    if (m) return { kind: m[1], entityId: m[2], token: raw };
+                    const legacy = /UID:(\w+)\|ORDER:(\w+)\|DATETIME:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/.exec(raw);
+                    if (legacy) return { kind: 'ORDER', legacy: true, order: legacy[2], datetime: legacy[3] };
+                    return null;
+                }
+
+                function availableActions() {
+                    const { kind } = actionSheet.value;
+                    const r = currentRole.value;
+                    const a = [];
+                    if (kind === 'ORDER' && r === 'picking') a.push({ key: 'PICKING', label: 'Registrar picking' });
+                    if (kind === 'ORDER' && r === 'caja') a.push({ key: 'TO_DN', label: 'Pasar a albarán' });
+                    if (kind === 'DN' && r === 'packing') a.push({ key: 'PACKING', label: 'Confirmar packing' });
+                    if (kind === 'DN' && r === 'logistica') a.push({ key: 'LOG_INPUT', label: 'Rellenar logística' });
+                    return a;
+                }
+
+                async function performAction(key) {
+                    const body = { userId: currentUserId.value, role: currentRole.value, action: key };
+                    if (actionSheet.value.legacy) {
+                        body.kind = 'ORDER';
+                        body.order = actionSheet.value.order;
+                        body.datetime = actionSheet.value.datetime;
+                    } else {
+                        body.token = actionSheet.value.token;
+                    }
+                    if (key === 'LOG_INPUT') {
+                        body.payload = { ...logisticsForm };
+                    }
+                    try {
+                        const res = await fetch('api/scan.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body)
+                        });
+                        const result = await res.json();
+                        if (!res.ok) throw new Error(result.message || 'Error del servidor');
+                        if (key === 'TO_DN' && result.dnToken) {
+                            showNewQR(result.dnToken);
+                        }
+                        showMessage(`✅ ${result.message}`, true);
+                    } catch (e) {
+                        showMessage(`⚠️ ${e.message}`, false);
+                    } finally {
+                        closeActionSheet();
+                    }
+                }
+
+                function showNewQR(token) {
+                    const url = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(token)}`;
+                    const win = window.open('', '_blank');
+                    if (!win) return;
+                    win.document.write(`<img src="${url}"/><p>${token}</p>`);
+                    win.print();
+                }
+
+                function closeActionSheet() {
+                    actionSheet.value.open = false;
+                    pauseScan.value = false;
                 }
                 
                 function showMessage(text, success) {
@@ -284,10 +369,11 @@
                 }
 
                 return {
-                    isLoggedIn, currentUserId, logout,
+                    isLoggedIn, currentUserId, currentRole, logout,
                     message, pauseScan, cameraReady, devices, selectedDeviceId, constraints, showHistory,
-                    isLoadingHistory, myScans, loadingText, loadingSubtext,
-                    loadMyHistory, onCameraOn, onCameraError, onDetect, deleteScan, formatDateTime
+                    isLoadingHistory, myScans, loadingText, loadingSubtext, actionSheet,
+                    loadMyHistory, onCameraOn, onCameraError, onDetect, deleteScan, formatDateTime,
+                    availableActions, performAction, closeActionSheet, logisticsForm
                 };
             }
         }).mount('#app');

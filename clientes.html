@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clientes - Logística Family</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#2563eb',
+                        'success': '#059669',
+                        'warning': '#d97706',
+                        'danger': '#dc2626'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass-effect { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
+        .table-row-hover:hover { background: rgba(59, 130, 246, 0.1); transition: all 0.2s ease; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800">
+    <div id="app" v-if="isLoggedIn" class="min-h-screen flex flex-col">
+        <!-- Top bar -->
+        <header class="bg-white shadow fixed top-0 inset-x-0 z-10">
+            <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <a href="#" class="flex items-center text-primary font-semibold text-lg">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 12h18M3 17h18"></path></svg>
+                        <span class="ml-2 hidden sm:block">Logística Family</span>
+                    </a>
+                    <nav class="hidden md:flex items-center space-x-4">
+                        <a href="pedidos.html" class="text-slate-600 hover:text-slate-900">Pedidos</a>
+                        <a href="albaran.html" class="text-slate-600 hover:text-slate-900">Albarán</a>
+                        <a href="escaneos.html" class="text-slate-600 hover:text-slate-900">Escaneos</a>
+                        <a href="clientes.html" class="border-b-2 border-primary text-primary pb-1">Clientes</a>
+                    </nav>
+                </div>
+                <div class="flex items-center gap-3 flex-1 justify-end">
+                    <div class="hidden sm:flex items-center flex-1 max-w-md mr-4">
+                        <input v-model="search" type="text" placeholder="Buscar..." class="w-full bg-slate-100 border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary focus:border-primary" />
+                        <button class="ml-2 p-2 text-slate-600 hover:text-primary" title="Filtros">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707l-6.414 6.414V21l-4-2v-4.879L3.293 6.707A1 1 0 013 6V4z"/></svg>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium">{{ username }}</span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary capitalize">{{ role }}</span>
+                        <button @click="logout" class="p-2 rounded-lg hover:bg-slate-100" title="Salir">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main content -->
+        <main class="flex-1 max-w-7xl mx-auto px-4 py-24 space-y-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="flex gap-2">
+                    <button @click="importExcel" class="bg-success hover:bg-green-700 px-4 py-2 rounded-lg text-white transition-colors">Importar Excel</button>
+                    <button @click="exportExcel" class="bg-primary hover:bg-blue-700 px-4 py-2 rounded-lg text-white transition-colors">Exportar Excel</button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-200 text-slate-600">
+                        <tr>
+                            <th class="p-3">Id cliente</th>
+                            <th class="p-3">Nombre cliente</th>
+                            <th class="p-3">Dirección</th>
+                            <th class="p-3">Código postal</th>
+                            <th class="p-3">Localidad</th>
+                            <th class="p-3">Provincia</th>
+                            <th class="p-3">País</th>
+                            <th class="p-3">Notas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="client in filteredClients" :key="client.id" class="table-row-hover">
+                            <td class="p-3">{{ client.id }}</td>
+                            <td class="p-3">{{ client.name }}</td>
+                            <td class="p-3">{{ client.address }}</td>
+                            <td class="p-3">{{ client.postal }}</td>
+                            <td class="p-3">{{ client.city }}</td>
+                            <td class="p-3">{{ client.province }}</td>
+                            <td class="p-3">{{ client.country }}</td>
+                            <td class="p-3">{{ client.notes }}</td>
+                        </tr>
+                        <tr v-if="!filteredClients.length">
+                            <td colspan="8" class="text-center p-4 text-slate-400">No hay clientes</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <!-- Floating Scan button -->
+            <a href="app-scanner.html" class="fixed bottom-6 right-6 bg-primary text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700" title="Escanear QR">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h3m8 0h3a1 1 0 011 1v3m0 8v3a1 1 0 01-1 1h-3m-8 0H4a1 1 0 01-1-1v-3m0-8V4a1 1 0 011-1h3m6 4v6m-3-3h6"/></svg>
+            </a>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script>
+        const { createApp, ref, computed } = Vue;
+
+        createApp({
+            setup() {
+                const isLoggedIn = ref(false);
+                const username = ref('');
+                const role = ref('');
+
+                (() => {
+                    const sessionData = JSON.parse(localStorage.getItem('logisticaUser'));
+                    if (!sessionData) {
+                        window.location.href = 'login.html';
+                        return;
+                    }
+                    isLoggedIn.value = true;
+                    username.value = sessionData.username;
+                    role.value = sessionData.role;
+                })();
+
+                const search = ref('');
+                const clients = ref([
+                    { id: 'C001', name: 'Acme SA', address: 'Calle 1', postal: '28001', city: 'Madrid', province: 'Madrid', country: 'España', notes: '' },
+                    { id: 'C002', name: 'Globex', address: 'Avenida 5', postal: '08002', city: 'Barcelona', province: 'Barcelona', country: 'España', notes: '' },
+                    { id: 'C003', name: 'Initech', address: 'Plaza 7', postal: '41003', city: 'Sevilla', province: 'Sevilla', country: 'España', notes: 'Cliente VIP' }
+                ]);
+
+                const filteredClients = computed(() => {
+                    if (!search.value) return clients.value;
+                    const term = search.value.toLowerCase();
+                    return clients.value.filter(o => Object.values(o).some(v => String(v).toLowerCase().includes(term)));
+                });
+
+                const importExcel = () => alert('Función de importar Excel pendiente de implementación');
+                const exportExcel = () => alert('Función de exportar Excel pendiente de implementación');
+                const logout = () => {
+                    localStorage.removeItem('logisticaUser');
+                    window.location.href = 'login.html';
+                };
+
+                return { isLoggedIn, username, role, search, filteredClients, importExcel, exportExcel, logout };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

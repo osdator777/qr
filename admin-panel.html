@@ -340,9 +340,15 @@
                     isGenerating.value = true;
                     qrGenerated.value = true;
                     await nextTick();
-                    
+
                     try {
-                        const payload = `UID:${qrForm.userId.trim()}|ORDER:${qrForm.order.trim()}|DATETIME:${qrForm.date}T${qrForm.time}`;
+                        const nonce = Math.random().toString(36).slice(2, 10);
+                        const ts = Math.floor(Date.now() / 1000);
+                        const base = `LF1.ORDER.${qrForm.order.trim()}.${nonce}.${ts}`;
+                        const msg = base + '::display-only';
+                        const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
+                        const hex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+                        const payload = `${base}.${hex.slice(0,64)}`;
                         await QRCode.toCanvas(qrCanvas.value, payload, { width: 256, margin: 2, color: { dark: '#000000', light: '#FFFFFF' } });
                         showNotification('Código QR generado exitosamente', 'success');
                     } catch (error) {
