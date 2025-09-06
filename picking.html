@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Picking List - Logística Family</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#2563eb',
+                        'success': '#059669',
+                        'warning': '#d97706',
+                        'danger': '#dc2626'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass-effect { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800">
+    <div id="app" v-if="isLoggedIn" class="min-h-screen flex flex-col">
+        <!-- Top bar -->
+        <header class="bg-white shadow fixed top-0 inset-x-0 z-10">
+            <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <a href="pedidos.html" class="text-primary font-semibold">←</a>
+                    <h1 class="text-xl font-bold">Picking List</h1>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium">{{ username }}</span>
+                    <span class="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary capitalize">{{ role }}</span>
+                    <button @click="logout" class="p-2 rounded-lg hover:bg-slate-100" title="Salir">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main content -->
+        <main class="flex-1 max-w-5xl mx-auto px-4 py-24 space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold">Pedido {{ orderId }}</h2>
+                <button @click="printList" class="bg-primary hover:bg-blue-700 px-4 py-2 rounded-lg text-white transition-colors">Imprimir</button>
+            </div>
+
+            <div class="space-y-4">
+                <div v-for="item in sortedItems" :key="item.id" class="glass-effect rounded-xl p-4 flex items-center gap-4">
+                    <img :src="item.image" alt="" class="w-20 h-20 object-cover rounded-lg">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-semibold">{{ item.name }}</h3>
+                        <p class="text-slate-500">Ubicación: {{ item.location }}</p>
+                    </div>
+                    <span class="text-xl font-bold text-primary">{{ item.qty }}</span>
+                </div>
+                <div v-if="!sortedItems.length" class="text-center text-slate-400 py-8">No hay productos en el listado</div>
+            </div>
+        </main>
+        <!-- FAB -->
+        <a href="app-scanner.html" class="fixed bottom-6 right-6 bg-primary text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700" title="Escanear QR">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h3m8 0h3a1 1 0 011 1v3m0 8v3a1 1 0 01-1 1h-3m-8 0H4a1 1 0 01-1-1v-3m0-8V4a1 1 0 011-1h3m6 4v6m-3-3h6"/></svg>
+        </a>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script>
+        const { createApp, ref, computed } = Vue;
+
+        createApp({
+            setup() {
+                const isLoggedIn = ref(false);
+                const username = ref('');
+                const role = ref('');
+                const orderId = ref('PED-001');
+
+                (() => {
+                    const sessionData = JSON.parse(localStorage.getItem('logisticaUser'));
+                    if (!sessionData) {
+                        window.location.href = 'login.html';
+                        return;
+                    }
+                    isLoggedIn.value = true;
+                    username.value = sessionData.username;
+                    role.value = sessionData.role;
+                })();
+
+                const items = ref([
+                    { id: 1, name: 'Producto A', location: 'Pasillo 1', qty: 2, image: 'https://via.placeholder.com/150' },
+                    { id: 2, name: 'Producto B', location: 'Pasillo 2', qty: 1, image: 'https://via.placeholder.com/150' },
+                    { id: 3, name: 'Producto C', location: 'Pasillo 3', qty: 4, image: 'https://via.placeholder.com/150' }
+                ]);
+
+                const sortedItems = computed(() => items.value.slice().sort((a, b) => a.location.localeCompare(b.location)));
+
+                const printList = () => window.print();
+                const logout = () => {
+                    localStorage.removeItem('logisticaUser');
+                    window.location.href = 'login.html';
+                };
+
+                return { isLoggedIn, username, role, orderId, sortedItems, printList, logout };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

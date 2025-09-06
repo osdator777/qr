@@ -6,56 +6,127 @@ header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
 require_once 'db.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
+const QR_SECRET = 'cambia_esto';
 
-if ($method == 'OPTIONS') {
-    http_response_code(200);
-    exit();
+function sign_token($kind, $entityId, $nonce, $ts) {
+    $base = "LF1.$kind.$entityId.$nonce.$ts";
+    return $base . '.' . hash_hmac('sha256', $base, QR_SECRET);
+}
+function parse_token($token) {
+    if (!preg_match('/^LF1\.(ORDER|DN)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{6,})\.(\d{10})\.([A-Fa-f0-9]{32,})$/', $token, $m)) return null;
+    return ['kind' => $m[1], 'entityId' => $m[2], 'nonce' => $m[3], 'ts' => $m[4], 'sig' => $m[5]];
+}
+function verify_token($token) {
+    $p = parse_token($token); if (!$p) return false;
+    return hash_equals(sign_token($p['kind'], $p['entityId'], $p['nonce'], $p['ts']), $token);
 }
 
-// --- GUARDAR UN NUEVO ESCANEO (MÉTODO POST) ---
+$method = $_SERVER['REQUEST_METHOD'];
+if ($method == 'OPTIONS') { http_response_code(200); exit(); }
+
+// ---------- POST ----------
 if ($method == 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
-
-    if (!$data || !isset($data['userId']) || !isset($data['order']) || !isset($data['datetime'])) {
+    if (!$data || !isset($data['userId'])) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Datos incompletos.']);
+        echo json_encode(['success' => false, 'message' => 'Falta userId']);
         exit;
     }
 
-    try {
-        $stmt = $pdo->prepare("INSERT INTO scans (userId, orderNumber, datetimeQR, scannedAt) VALUES (?, ?, ?, ?)");
-        $stmt->execute([$data['userId'], $data['order'], $data['datetime'], date('c')]); // Usar fecha del servidor
-        
-        http_response_code(201);
-        echo json_encode(['success' => true, 'message' => 'Escaneo guardado.']);
-
-    } catch (PDOException $e) {
-        if ($e->getCode() == '23000') {
-            // Si el QR ya existe, buscamos quién lo escaneó para dar más detalles.
-            $stmt = $pdo->prepare("SELECT userId, scannedAt FROM scans WHERE orderNumber = ? AND datetimeQR = ?");
-            $stmt->execute([$data['order'], $data['datetime']]);
-            $existingScan = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            $message = 'Este QR ya fue registrado.';
-            if ($existingScan) {
-                $scanDate = date_format(date_create($existingScan['scannedAt']), 'd/m/Y H:i');
-                $message = "QR ya escaneado por {$existingScan['userId']} el {$scanDate}.";
+    // Legacy format
+    if (isset($data['order'], $data['datetime'])) {
+        try {
+            $stmt = $pdo->prepare("INSERT INTO scans (userId, orderNumber, datetimeQR, scannedAt) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$data['userId'], $data['order'], $data['datetime'], date('c')]);
+            $pdo->prepare("INSERT OR IGNORE INTO orders (orderNumber, status) VALUES (?, 'EN_RECOGIDA')")
+                ->execute([$data['order']]);
+            echo json_encode(['success' => true, 'message' => 'Escaneo guardado (legacy).']);
+        } catch (PDOException $e) {
+            if ($e->getCode() == '23000') {
+                $stmt = $pdo->prepare("SELECT userId, scannedAt FROM scans WHERE orderNumber=? AND datetimeQR=?");
+                $stmt->execute([$data['order'], $data['datetime']]);
+                $ex = $stmt->fetch(PDO::FETCH_ASSOC);
+                $msg = "QR ya escaneado por {$ex['userId']} el " . date('d/m/Y H:i', strtotime($ex['scannedAt']));
+                http_response_code(409);
+                echo json_encode(['success' => false, 'message' => $msg]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'message' => 'Error BD']);
             }
-            
-            http_response_code(409); // Conflict
-            echo json_encode(['success' => false, 'message' => $message]);
+        }
+        exit;
+    }
+
+    // Token + acción
+    if (!isset($data['token'], $data['role'], $data['action'])) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Datos insuficientes']);
+        exit;
+    }
+    if (!verify_token($data['token'])) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Token inválido']);
+        exit;
+    }
+    $p = parse_token($data['token']);
+
+    try {
+        $pdo->beginTransaction();
+        if ($p['kind'] === 'ORDER') {
+            $pdo->prepare("INSERT OR IGNORE INTO orders (id, orderNumber, status) VALUES (?, ?, 'EN_RECOGIDA')")
+                ->execute([$p['entityId'], $p['entityId']]);
+        }
+        $payload = isset($data['payload']) ? json_encode($data['payload']) : null;
+        $pdo->prepare("INSERT INTO scan_events (userId, role, kind, entity_id, action, payload_json) VALUES (?,?,?,?,?,?)")
+            ->execute([$data['userId'], $data['role'], $p['kind'], $p['entityId'], $data['action'], $payload]);
+        $resp = ['success' => true, 'message' => 'Acción registrada'];
+        if ($data['action'] === 'PICKING' && $p['kind'] === 'ORDER') {
+            $pdo->prepare("UPDATE orders SET status='EN_RECOGIDA' WHERE id=?")
+                ->execute([$p['entityId']]);
+            $resp['message'] = 'Picking registrado';
+        }
+        if ($data['action'] === 'TO_DN' && $p['kind'] === 'ORDER') {
+            $pdo->prepare("INSERT INTO delivery_notes (order_id, status) VALUES (?, 'EN_PACKING')")
+                ->execute([$p['entityId']]);
+            $dnId = $pdo->lastInsertId();
+            $nonce = bin2hex(random_bytes(6));
+            $ts = time();
+            $dnToken = sign_token('DN', $dnId, $nonce, $ts);
+            $pdo->prepare("INSERT INTO qr_tokens (kind, entity_id, token) VALUES ('DN', ?, ?)")
+                ->execute([$dnId, $dnToken]);
+            $pdo->prepare("UPDATE orders SET status='EN_PACKING' WHERE id=?")
+                ->execute([$p['entityId']]);
+            $resp['message'] = 'Pedido pasado a albarán';
+            $resp['dnToken'] = $dnToken;
+        }
+        if ($data['action'] === 'PACKING' && $p['kind'] === 'DN') {
+            $pdo->prepare("UPDATE delivery_notes SET status='EN_PACKING' WHERE id=?")
+                ->execute([$p['entityId']]);
+            $resp['message'] = 'Packing registrado';
+        }
+        if ($data['action'] === 'LOG_INPUT' && $p['kind'] === 'DN') {
+            $pdo->prepare("UPDATE delivery_notes SET status='ENVIADO' WHERE id=?")
+                ->execute([$p['entityId']]);
+            $resp['message'] = 'Datos de logística guardados';
+        }
+        $pdo->commit();
+        echo json_encode($resp);
+    } catch (PDOException $e) {
+        $pdo->rollBack();
+        if ($e->getCode() === '23000') {
+            http_response_code(409);
+            echo json_encode(['success' => false, 'message' => 'Esta acción ya fue registrada para este QR.']);
         } else {
             http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'Error de base de datos: ' . $e->getMessage()]);
+            echo json_encode(['success' => false, 'message' => 'Error de base de datos']);
         }
     }
+    exit;
 }
 
-// --- OBTENER ESCANEOS (MÉTODO GET) ---
+// ---------- GET ----------
 if ($method == 'GET') {
     try {
-        // Si se pide un userId, filtramos por ese usuario. Si no, devolvemos todo.
         if (isset($_GET['userId'])) {
             $stmt = $pdo->prepare("SELECT * FROM scans WHERE userId = ? ORDER BY scannedAt DESC");
             $stmt->execute([$_GET['userId']]);
@@ -65,60 +136,48 @@ if ($method == 'GET') {
         }
         $scans = $stmt->fetchAll(PDO::FETCH_ASSOC);
         echo json_encode($scans);
-
     } catch (PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'message' => 'Error al obtener los datos: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => 'Error al obtener los datos']);
     }
 }
 
-// --- BORRAR UN ESCANEO (NUEVO MÉTODO DELETE) ---
+// ---------- DELETE ----------
 if ($method == 'DELETE') {
-    // El ID del escaneo a borrar viene por la URL (ej: ?id=123)
     if (!isset($_GET['id'])) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Falta el ID del escaneo a eliminar.']);
         exit;
     }
-
-    // El ID del usuario que solicita el borrado viene en el cuerpo
     $requestBody = json_decode(file_get_contents('php://input'), true);
     if (!isset($requestBody['userId'])) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Falta la identificación del usuario.']);
         exit;
     }
-
     $scanIdToDelete = $_GET['id'];
     $requestingUserId = $requestBody['userId'];
-
     try {
-        // Primero, verificamos que el escaneo exista y pertenezca al usuario que lo solicita
         $stmt = $pdo->prepare("SELECT userId FROM scans WHERE id = ?");
         $stmt->execute([$scanIdToDelete]);
         $scan = $stmt->fetch(PDO::FETCH_ASSOC);
-
         if (!$scan) {
-            http_response_code(404); // Not Found
+            http_response_code(404);
             echo json_encode(['success' => false, 'message' => 'El escaneo no existe.']);
             exit;
         }
-
         if ($scan['userId'] !== $requestingUserId) {
-            http_response_code(403); // Forbidden
+            http_response_code(403);
             echo json_encode(['success' => false, 'message' => 'No tienes permiso para borrar este escaneo.']);
             exit;
         }
-
-        // Si todo es correcto, procedemos a borrar
         $deleteStmt = $pdo->prepare("DELETE FROM scans WHERE id = ?");
         $deleteStmt->execute([$scanIdToDelete]);
-
         echo json_encode(['success' => true, 'message' => 'Escaneo eliminado correctamente.']);
-
     } catch (PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'message' => 'Error de base de datos al eliminar.']);
     }
 }
 ?>
+
