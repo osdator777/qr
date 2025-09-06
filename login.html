@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar Sesión - Logística Family</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass-effect { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen text-white flex items-center justify-center p-4">
+    <div id="app" class="w-full max-w-md">
+        <form @submit.prevent="login" class="glass-effect rounded-2xl p-8 md:p-10 shadow-2xl fade-in">
+            <!-- Header del formulario -->
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-white rounded-xl flex items-center justify-center shadow-lg mx-auto mb-4">
+                    <svg class="w-9 h-9 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                </div>
+                <h1 class="text-3xl font-bold">Logística Family</h1>
+                <p class="text-slate-300">Por favor, inicia sesión para continuar</p>
+            </div>
+            <!-- Campos del formulario -->
+            <div class="space-y-6">
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-300 mb-2">Usuario</label>
+                    <input v-model="username" id="username" type="text" placeholder="Escribe tu usuario" required
+                           class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-300 mb-2">Contraseña</label>
+                    <input v-model="password" id="password" type="password" placeholder="••••••••" required
+                           class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                </div>
+            </div>
+            <!-- Mensaje de error -->
+            <div v-if="errorMessage" class="mt-6 text-center bg-red-500/30 text-red-300 text-sm p-3 rounded-lg">
+                {{ errorMessage }}
+            </div>
+            <!-- Botón de envío -->
+            <div class="mt-8">
+                <button type="submit" :disabled="isLoading"
+                        class="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center">
+                    <span v-if="isLoading" class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></span>
+                    <span v-else>Acceder</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script>
+        const { createApp, ref } = Vue;
+        createApp({
+            setup() {
+                const username = ref('');
+                const password = ref('');
+                const isLoading = ref(false);
+                const errorMessage = ref('');
+
+                async function login() {
+                    isLoading.value = true;
+                    errorMessage.value = '';
+                    try {
+                        const response = await fetch('api/login.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                username: username.value,
+                                password: password.value
+                            })
+                        });
+
+                        const result = await response.json();
+
+                        if (!response.ok) {
+                            throw new Error(result.message || 'Error de autenticación');
+                        }
+                        
+                        // Éxito: Guardar sesión y redirigir
+                        localStorage.setItem('logisticaUser', JSON.stringify(result.user));
+                        
+                        // Redirigir según el rol
+                        if (result.user.role === 'admin') {
+                            window.location.href = 'admin-panel.html';
+                        } else if (result.user.role === 'operator') {
+                            window.location.href = 'app-scanner.html';
+                        }
+
+                    } catch (error) {
+                        errorMessage.value = error.message;
+                    } finally {
+                        isLoading.value = false;
+                    }
+                }
+                return { username, password, isLoading, errorMessage, login };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Administrativo - Logística Family</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#2563eb',
+                        'success': '#059669',
+                        'warning': '#d97706',
+                        'danger': '#dc2626'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass-effect { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
+        .gradient-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .stats-animation { animation: countUp 1s ease-out; }
+        @keyframes countUp { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .qr-generated { animation: qrGenerate 0.5s ease-out; }
+        @keyframes qrGenerate { 0% { transform: scale(0.8) rotate(-5deg); opacity: 0; } 50% { transform: scale(1.1) rotate(2deg); } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
+        .table-row-hover:hover { background: rgba(59, 130, 246, 0.1); transform: translateX(4px); transition: all 0.2s ease; }
+        .fade-enter-active, .fade-leave-active { transition: all 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(-10px); }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen text-white">
+    <!-- El v-if previene que se muestre nada hasta que se confirme el login -->
+    <div id="app" v-if="isLoggedIn" class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-blue-600 to-purple-600 shadow-2xl">
+            <div class="container mx-auto px-6 py-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg"><svg class="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"></path></svg></div>
+                        <div>
+                            <h1 class="text-2xl font-bold">Panel Administrativo</h1>
+                            <p class="text-blue-100">Usuario: <span class="font-bold uppercase">{{ adminUsername }}</span></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button @click="refreshData(true)" title="Actualizar Datos" class="p-3 rounded-xl bg-white/20 hover:bg-white/30 transition-all duration-200"><svg class="w-6 h-6" :class="{ 'animate-spin': isRefreshing }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg></button>
+                        <button @click="logout" title="Cerrar Sesión" class="p-3 rounded-xl bg-red-500 hover:bg-red-400 transition-colors">
+                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="container mx-auto px-6 py-8">
+            <!-- Estadísticas Dashboard -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <div class="gradient-card rounded-2xl p-6 text-white stats-animation"><div class="flex items-center justify-between"><div><p class="text-sm opacity-80">Total Escaneos</p><p class="text-3xl font-bold">{{ stats.total }}</p></div><div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg></div></div></div>
+                <div class="bg-green-500 rounded-2xl p-6 text-white stats-animation"><div class="flex items-center justify-between"><div><p class="text-sm opacity-80">Escaneos de Hoy</p><p class="text-3xl font-bold">{{ stats.today }}</p></div><div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg></div></div></div>
+                <div class="bg-purple-500 rounded-2xl p-6 text-white stats-animation"><div class="flex items-center justify-between"><div><p class="text-sm opacity-80">Usuarios Activos (Hoy)</p><p class="text-3xl font-bold">{{ stats.activeUsers }}</p></div><div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197"></path></svg></div></div></div>
+            </div>
+
+            <!-- Generador QR -->
+            <div class="glass-effect rounded-2xl p-8 mb-8">
+                <div class="flex items-center mb-6"><div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mr-4"><svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg></div><h2 class="text-2xl font-bold">Generador de Códigos QR</h2></div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label class="block text-sm font-medium text-gray-300 mb-2">ID Usuario (Operario)</label><input v-model="qrForm.userId" type="text" placeholder="Ej: operario1" class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"></div>
+                            <div><label class="block text-sm font-medium text-gray-300 mb-2">Número de Pedido</label><input v-model="qrForm.order" type="text" placeholder="Ej: 123456" class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label class="block text-sm font-medium text-gray-300 mb-2">Fecha</label><input v-model="qrForm.date" type="date" class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"></div>
+                            <div><label class="block text-sm font-medium text-gray-300 mb-2">Hora</label><input v-model="qrForm.time" type="time" class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"></div>
+                        </div>
+                        <button @click="generateQR" :disabled="!canGenerateQR" class="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:from-gray-500 disabled:to-gray-500 text-white font-medium py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h4"></path></svg>
+                            <span>{{ isGenerating ? 'Generando...' : 'Generar Código QR' }}</span>
+                        </button>
+                    </div>
+                    <div class="flex flex-col items-center justify-center">
+                        <div v-if="qrGenerated" class="qr-generated bg-white p-4 rounded-2xl shadow-2xl"><canvas ref="qrCanvas" class="max-w-full h-auto"></canvas></div>
+                        <div v-else class="w-64 h-64 bg-slate-700 rounded-2xl flex items-center justify-center border-2 border-dashed border-slate-500">
+                            <div class="text-center text-slate-400">
+                                <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h4"></path></svg>
+                                <p>El código QR aparecerá aquí</p>
+                            </div>
+                        </div>
+                        <button v-if="qrGenerated" @click="downloadQR" class="mt-4 bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            <span>Descargar QR</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filtros y Búsqueda -->
+            <div class="glass-effect rounded-2xl p-6 mb-8">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 md:space-x-4">
+                    <div class="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
+                        <input v-model="searchTerm" @input="currentPage = 1" type="text" placeholder="Buscar por Usuario o Pedido..." class="bg-slate-700 border border-slate-600 text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                        <select v-model="filterPeriod" @change="currentPage = 1" class="bg-slate-700 border border-slate-600 text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                            <option value="all">Todos los períodos</option><option value="today">Hoy</option><option value="week">Esta semana</option><option value="month">Este mes</option>
+                        </select>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button @click="clearFilters" class="bg-slate-600 hover:bg-slate-500 text-white font-medium py-2 px-4 rounded-lg transition-colors">Limpiar</button>
+                        <button @click="exportToExcel" class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            <span>Excel</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabla de Historial -->
+            <div class="glass-effect rounded-2xl overflow-hidden mb-8">
+                <div class="p-6 border-b border-slate-600"><div class="flex items-center justify-between"><h2 class="text-xl font-bold">Historial de Escaneos</h2><span class="text-sm text-gray-400">{{ filteredScans.length }} registros</span></div></div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-700/50"><tr><th class="px-6 py-4 text-left font-medium text-gray-300">Usuario ID</th><th class="px-6 py-4 text-left font-medium text-gray-300">Pedido</th><th class="px-6 py-4 text-left font-medium text-gray-300">Fecha QR</th><th class="px-6 py-4 text-left font-medium text-gray-300">Escaneado</th></tr></thead>
+                        <tbody>
+                            <tr v-if="paginatedScans.length === 0"><td colspan="4" class="text-center py-8 text-slate-400">No se encontraron registros que coincidan con los filtros.</td></tr>
+                            <tr v-for="scan in paginatedScans" :key="scan.id" class="border-b border-slate-700/50 table-row-hover">
+                                <td class="px-6 py-4 font-medium">{{ scan.userId }}</td><td class="px-6 py-4">#{{ scan.orderNumber }}</td><td class="px-6 py-4">{{ formatDateTime(scan.datetimeQR) }}</td><td class="px-6 py-4">{{ formatDateTime(scan.scannedAt) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div v-if="totalPages > 1" class="p-6 border-t border-slate-600">
+                    <div class="flex items-center justify-between">
+                        <div class="text-sm text-gray-400">Mostrando {{ (currentPage - 1) * itemsPerPage + 1 }} a {{ Math.min(currentPage * itemsPerPage, filteredScans.length) }} de {{ filteredScans.length }} registros</div>
+                        <div class="flex space-x-2">
+                            <button @click="currentPage--" :disabled="currentPage === 1" class="px-3 py-1 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Anterior</button>
+                            <span class="px-3 py-1 bg-blue-500 rounded-lg">{{ currentPage }}</span>
+                            <button @click="currentPage++" :disabled="currentPage === totalPages" class="px-3 py-1 rounded-lg bg-slate-600 hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Siguiente</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Gestión de Usuarios -->
+            <div class="glass-effect rounded-2xl p-8">
+                <h2 class="text-2xl font-bold mb-6">Gestión de Usuarios</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Formulario para crear nuevo usuario -->
+                    <div>
+                        <h3 class="font-semibold text-lg mb-4">Crear Nuevo Usuario</h3>
+                        <form @submit.prevent="createUser" class="space-y-4">
+                             <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Nombre de Usuario</label>
+                                <input v-model="newUser.username" type="text" placeholder="Ej: operario3" required class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Contraseña</label>
+                                <input v-model="newUser.password" type="text" placeholder="Contraseña temporal" required class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Rol</label>
+                                <select v-model="newUser.role" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3">
+                                    <option value="operator">Operario</option>
+                                    <option value="admin">Administrador</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                                Crear Usuario
+                            </button>
+                        </form>
+                    </div>
+                    <!-- Lista de usuarios existentes -->
+                    <div>
+                        <h3 class="font-semibold text-lg mb-4">Usuarios Registrados</h3>
+                        <div class="max-h-80 overflow-y-auto pr-2">
+                             <table class="w-full text-sm">
+                                <thead class="bg-slate-700/50">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left">Usuario</th>
+                                        <th class="px-4 py-2 text-left">Rol</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-if="users.length === 0"><td colspan="2" class="text-center py-4 text-slate-400">Cargando usuarios...</td></tr>
+                                    <tr v-for="user in users" :key="user.id" class="border-b border-slate-700/50">
+                                        <td class="px-4 py-3">{{ user.username }}</td>
+                                        <td class="px-4 py-3 uppercase text-xs font-bold" :class="user.role === 'admin' ? 'text-purple-400' : 'text-blue-400'">{{ user.role }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notificaciones -->
+        <transition name="fade"><div v-if="notification.show" class="fixed top-6 right-6 z-50"><div :class="['p-4 rounded-lg shadow-2xl text-white font-medium', notification.type === 'success' ? 'bg-green-500' : 'bg-red-500']"><div class="flex items-center space-x-2"><svg v-if="notification.type === 'success'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><span>{{ notification.message }}</span></div></div></div></transition>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        const { createApp, ref, reactive, computed, onMounted, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                // --- PROTECCIÓN DE RUTA Y DATOS DE SESIÓN ---
+                const isLoggedIn = ref(false);
+                const adminUsername = ref('');
+                
+                (() => {
+                    const sessionData = JSON.parse(localStorage.getItem('logisticaUser'));
+                    if (!sessionData || sessionData.role !== 'admin') {
+                        window.location.href = 'login.html';
+                        return;
+                    }
+                    isLoggedIn.value = true;
+                    adminUsername.value = sessionData.username;
+                })();
+
+                // --- ESTADOS REACTIVOS ---
+                const isRefreshing = ref(false);
+                const isGenerating = ref(false);
+                const qrGenerated = ref(false);
+                const searchTerm = ref('');
+                const filterPeriod = ref('all');
+                const currentPage = ref(1);
+                const itemsPerPage = 10;
+                const allScans = ref([]);
+                const users = ref([]);
+                const stats = ref({ total: 0, today: 0, activeUsers: 0 });
+                const qrForm = reactive({ userId: '', order: '', date: new Date().toISOString().slice(0, 10), time: new Date().toTimeString().slice(0, 5) });
+                const newUser = reactive({ username: '', password: '', role: 'operator' });
+                const notification = reactive({ show: false, message: '', type: 'success' });
+                const qrCanvas = ref(null);
+
+                // --- LIFECYCLE HOOK ---
+                onMounted(() => {
+                    if (isLoggedIn.value) {
+                        refreshData(false);
+                    }
+                });
+                
+                // --- PROPIEDADES COMPUTADAS ---
+                const filteredScans = computed(() => {
+                    let filtered = allScans.value;
+                    if (searchTerm.value) {
+                        const term = searchTerm.value.toLowerCase();
+                        filtered = filtered.filter(scan => scan.userId.toLowerCase().includes(term) || scan.orderNumber.toString().toLowerCase().includes(term));
+                    }
+                    if (filterPeriod.value !== 'all') {
+                        const now = new Date();
+                        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        filtered = filtered.filter(scan => {
+                            const scanDate = new Date(scan.scannedAt);
+                            if (filterPeriod.value === 'today') return scanDate >= today;
+                            if (filterPeriod.value === 'week') { const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7); return scanDate >= weekAgo; }
+                            if (filterPeriod.value === 'month') { const monthAgo = new Date(today); monthAgo.setMonth(monthAgo.getMonth() - 1); return scanDate >= monthAgo; }
+                            return true;
+                        });
+                    }
+                    return filtered;
+                });
+                
+                const totalPages = computed(() => Math.ceil(filteredScans.value.length / itemsPerPage));
+                const paginatedScans = computed(() => {
+                    const start = (currentPage.value - 1) * itemsPerPage;
+                    return filteredScans.value.slice(start, start + itemsPerPage);
+                });
+                const canGenerateQR = computed(() => qrForm.userId.trim() && qrForm.order.trim() && !isGenerating.value);
+
+                // --- MÉTODOS ---
+                function logout() {
+                    localStorage.removeItem('logisticaUser');
+                    window.location.href = 'login.html';
+                }
+
+                async function refreshData(showNotif = true) {
+                    isRefreshing.value = true;
+                    try {
+                        const [scansResponse, usersResponse] = await Promise.all([
+                            fetch('api/scan.php'),
+                            fetch('api/user-manager.php')
+                        ]);
+
+                        if (!scansResponse.ok || !usersResponse.ok) throw new Error('Error de red al actualizar los datos.');
+                        
+                        const scansData = await scansResponse.json();
+                        users.value = await usersResponse.json();
+                        allScans.value = scansData;
+
+                        const today = new Date().toDateString();
+                        const scansToday = scansData.filter(s => new Date(s.scannedAt).toDateString() === today);
+                        
+                        stats.value.total = scansData.length;
+                        stats.value.today = scansToday.length;
+                        stats.value.activeUsers = new Set(scansToday.map(s => s.userId)).size;
+
+                        if (showNotif) showNotification('Datos actualizados correctamente', 'success');
+                    } catch (error) {
+                        showNotification(error.message, 'error');
+                    } finally {
+                        isRefreshing.value = false;
+                    }
+                }
+                
+                async function createUser() {
+                    if (!newUser.username.trim() || !newUser.password.trim()) {
+                        showNotification('Nombre de usuario y contraseña son obligatorios.', 'error');
+                        return;
+                    }
+                    try {
+                        const response = await fetch('api/user-manager.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(newUser)
+                        });
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.message);
+
+                        showNotification(result.message, 'success');
+                        newUser.username = '';
+                        newUser.password = '';
+                        refreshData(false);
+
+                    } catch(error) {
+                        showNotification(error.message, 'error');
+                    }
+                }
+
+                async function generateQR() {
+                    if (!canGenerateQR.value) return;
+                    isGenerating.value = true;
+                    qrGenerated.value = true;
+                    await nextTick();
+                    
+                    try {
+                        const payload = `UID:${qrForm.userId.trim()}|ORDER:${qrForm.order.trim()}|DATETIME:${qrForm.date}T${qrForm.time}`;
+                        await QRCode.toCanvas(qrCanvas.value, payload, { width: 256, margin: 2, color: { dark: '#000000', light: '#FFFFFF' } });
+                        showNotification('Código QR generado exitosamente', 'success');
+                    } catch (error) {
+                        console.error('Error generando QR:', error);
+                        showNotification('Error al generar el código QR', 'error');
+                        qrGenerated.value = false;
+                    } finally {
+                        isGenerating.value = false;
+                    }
+                }
+
+                function downloadQR() {
+                    if (!qrCanvas.value) return;
+                    const link = document.createElement('a');
+                    link.download = `QR_${qrForm.userId}_${qrForm.order}.png`;
+                    link.href = qrCanvas.value.toDataURL();
+                    link.click();
+                }
+
+                function clearFilters() {
+                    searchTerm.value = '';
+                    filterPeriod.value = 'all';
+                    currentPage.value = 1;
+                }
+
+                function exportToExcel() {
+                    try {
+                        const dataToExport = filteredScans.value.map(scan => ({ 
+                            'ID Usuario': scan.userId, 
+                            'Pedido': scan.orderNumber, 
+                            'Fecha QR': formatDateTime(scan.datetimeQR), 
+                            'Fecha Escaneo': formatDateTime(scan.scannedAt) 
+                        }));
+                        if (dataToExport.length === 0) {
+                            showNotification('No hay datos para exportar.', 'warning');
+                            return;
+                        }
+                        const wb = XLSX.utils.book_new();
+                        const ws = XLSX.utils.json_to_sheet(dataToExport);
+                        const colWidths = Object.keys(dataToExport[0]).map(key => ({ wch: Math.max(key.length, ...dataToExport.map(row => (row[key] || '').toString().length)) + 2 }));
+                        ws['!cols'] = colWidths;
+                        XLSX.utils.book_append_sheet(wb, ws, 'Historial de Escaneos');
+                        XLSX.writeFile(wb, `LogisticaFamily_Reporte_${new Date().toISOString().slice(0,10)}.xlsx`);
+                        showNotification('Reporte Excel generado con éxito', 'success');
+                    } catch (e) {
+                        showNotification('Error al generar el archivo Excel', 'error');
+                        console.error(e);
+                    }
+                }
+
+                function formatDateTime(isoString) {
+                    if (!isoString) return 'N/A';
+                    try {
+                        return new Date(isoString).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+                    } catch { return 'Fecha inválida'; }
+                }
+
+                function showNotification(message, type = 'success') {
+                    notification.message = message;
+                    notification.type = type;
+                    notification.show = true;
+                    setTimeout(() => { notification.show = false; }, 3000);
+                }
+
+                return { 
+                    isLoggedIn, adminUsername, logout, 
+                    isRefreshing, isGenerating, qrGenerated, searchTerm, filterPeriod, currentPage, itemsPerPage, 
+                    stats, qrForm, notification, qrCanvas, 
+                    allScans, filteredScans, totalPages, paginatedScans, canGenerateQR, 
+                    users, newUser, createUser,
+                    refreshData, generateQR, downloadQR, clearFilters, exportToExcel, formatDateTime 
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

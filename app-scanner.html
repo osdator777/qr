@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logística Family - Escáner QR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#2563eb',
+                        'success': '#059669',
+                        'warning': '#d97706',
+                        'danger': '#dc2626'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .scanner-frame { position: relative; overflow: hidden; border-radius: 1rem; }
+        .scanner-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient( to bottom, rgba(0,0,0,0.6) 0%, transparent 25%, transparent 75%, rgba(0,0,0,0.6) 100% ); pointer-events: none; }
+        .scan-line { position: absolute; left: 20px; right: 20px; height: 2px; background: linear-gradient(90deg, transparent, #00ff00, transparent); animation: scan 2s linear infinite; }
+        @keyframes scan { 0% { top: 25%; opacity: 1; } 50% { opacity: 1; } 100% { top: 75%; opacity: 0; } }
+        .corner-frame { position: absolute; width: 40px; height: 40px; border: 3px solid #00ff00; }
+        .corner-tl { top: 25%; left: 20px; border-right: none; border-bottom: none; }
+        .corner-tr { top: 25%; right: 20px; border-left: none; border-bottom: none; }
+        .corner-bl { bottom: 25%; left: 20px; border-right: none; border-top: none; }
+        .corner-br { bottom: 25%; right: 20px; border-left: none; border-top: none; }
+        .pulse-animation { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .slide-up { animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .vibrate { animation: vibrate 0.3s ease-in-out; }
+        @keyframes vibrate { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+        .fade-enter-active, .fade-leave-active { transition: all 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(10px); }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen text-white">
+    <div id="app" v-if="isLoggedIn" class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-blue-600 to-blue-700 shadow-xl">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h4"></path></svg>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold">Logística Family</h1>
+                            <p class="text-blue-100 text-sm">Usuario: <span class="font-bold uppercase">{{ currentUserId }}</span></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button @click="loadMyHistory" title="Ver mi historial" class="p-2 rounded-lg bg-blue-500 hover:bg-blue-400 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v11.494m-5.747-8.247l11.494 0M4.253 12l15.494 0M19.747 12l-15.494 0"></path></svg>
+                        </button>
+                        <button @click="logout" title="Cerrar Sesión" class="p-2 rounded-lg bg-red-500 hover:bg-red-400 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Camera Selector -->
+        <div v-if="devices.length > 1" class="mx-4 mt-4 bg-slate-800 rounded-xl p-4">
+            <label class="block text-sm font-medium text-gray-300 mb-2"><svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>Seleccionar Cámara</label>
+            <select v-model="selectedDeviceId" class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg p-3 text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                <option v-for="device in devices" :key="device.deviceId" :value="device.deviceId">{{ device.label || `Cámara ${device.deviceId.slice(-4)}` }}</option>
+            </select>
+        </div>
+
+        <!-- Scanner Section -->
+        <div class="flex-1 p-4">
+            <div class="scanner-frame bg-black relative overflow-hidden h-96 max-h-[70vh]">
+                <qrcode-stream @detect="onDetect" :paused="pauseScan" :constraints="constraints" @camera-on="onCameraOn" @error="onCameraError" class="w-full h-full object-cover"></qrcode-stream>
+                <div class="scanner-overlay">
+                    <div class="scan-line" v-if="cameraReady && !pauseScan"></div>
+                    <div class="corner-frame corner-tl"></div><div class="corner-frame corner-tr"></div><div class="corner-frame corner-bl"></div><div class="corner-frame corner-br"></div>
+                </div>
+                <div v-if="!cameraReady" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center text-center p-4">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                    <p class="text-lg font-medium">{{ loadingText }}</p><p class="text-sm text-gray-400 mt-2">{{ loadingSubtext }}</p>
+                </div>
+            </div>
+            <div class="mt-4 p-4 bg-slate-800 rounded-xl">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center pulse-animation"><svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
+                    <div><p class="font-medium">Apunta la cámara al código QR</p><p class="text-sm text-gray-400">El escaneo será automático</p></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notificaciones -->
+        <transition name="fade"><div v-if="message.text" class="fixed bottom-6 left-4 right-4 z-50"><div :class="['p-4 rounded-xl shadow-2xl text-white font-medium text-center', message.success ? 'bg-green-500' : 'bg-red-500', message.success ? '' : 'vibrate']"><div class="flex items-center justify-center space-x-2"><svg v-if="message.success" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><span>{{ message.text }}</span></div></div></div></transition>
+        
+        <!-- Modal de Historial Personal con Botón de Borrar -->
+        <div v-if="showHistory" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50" @click="showHistory = false">
+            <div class="bg-slate-800 w-full max-w-md rounded-2xl p-6 slide-up mx-4 flex flex-col" @click.stop>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold">Mis Escaneos Recientes</h3>
+                    <button @click="showHistory = false" class="p-2 -m-2 text-2xl leading-none">×</button>
+                </div>
+                <div v-if="isLoadingHistory" class="text-center py-8 text-slate-300">Cargando historial...</div>
+                <div v-else-if="myScans.length === 0" class="text-center py-8 text-slate-400">Aún no tienes escaneos registrados.</div>
+                <ul v-else class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                    <li v-for="scan in myScans" :key="scan.id" class="bg-slate-700/80 p-3 rounded-lg flex items-center justify-between group">
+                        <div>
+                           <p class="font-bold">Pedido: <span class="text-blue-400">#{{ scan.orderNumber }}</span></p>
+                           <p class="text-sm text-slate-300">Escaneado: <span class="font-mono">{{ formatDateTime(scan.scannedAt) }}</span></p>
+                        </div>
+                        <!-- Botón de Borrar -->
+                        <button @click.stop="deleteScan(scan.id)" title="Eliminar este escaneo"
+                                class="p-2 rounded-full bg-red-500/20 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/vue-qrcode-reader@5.5.4/dist/vue-qrcode-reader.umd.js"></script>
+    <script>
+        const { createApp, ref, reactive, watch, onMounted } = Vue;
+        const { QrcodeStream } = VueQrcodeReader;
+
+        createApp({
+            components: { QrcodeStream },
+            setup() {
+                // --- PROTECCIÓN DE RUTA Y DATOS DE SESIÓN ---
+                const isLoggedIn = ref(false);
+                const currentUserId = ref('');
+                (() => {
+                    const sessionData = JSON.parse(localStorage.getItem('logisticaUser'));
+                    if (!sessionData) { window.location.href = 'login.html'; return; }
+                    isLoggedIn.value = true;
+                    currentUserId.value = sessionData.username;
+                })();
+
+                // --- ESTADOS REACTIVOS ---
+                const message = ref({ text: '', success: true });
+                const showHistory = ref(false);
+                const isLoadingHistory = ref(false);
+                const myScans = ref([]);
+                const pauseScan = ref(false);
+                const cameraReady = ref(false);
+                const loadingText = ref('Iniciando cámara...');
+                const loadingSubtext = ref('Por favor, autoriza el acceso en tu navegador.');
+                const devices = ref([]);
+                const selectedDeviceId = ref(null);
+                const constraints = reactive({ facingMode: { ideal: 'environment' } });
+
+                // --- LÓGICA DE LA CÁMARA (SIN CAMBIOS) ---
+                async function onCameraOn(capabilities) {
+                    cameraReady.value = true;
+                    if (navigator.vibrate) navigator.vibrate(50);
+                    try {
+                        const allDevices = await navigator.mediaDevices.enumerateDevices();
+                        devices.value = allDevices.filter(d => d.kind === 'videoinput');
+                        const currentStream = capabilities.getTracks()[0];
+                        const currentDeviceId = currentStream.getSettings().deviceId;
+                        selectedDeviceId.value = currentDeviceId;
+                    } catch(e) { console.error("No se pudo listar las cámaras", e); }
+                }
+                function onCameraError(error) {
+                    cameraReady.value = false;
+                    console.error("ERROR DE CÁMARA:", error.name, error);
+                    switch (error.name) {
+                        case 'NotAllowedError': loadingText.value = 'Permiso denegado'; loadingSubtext.value = 'Debes permitir el acceso a la cámara en los ajustes.'; break;
+                        case 'NotFoundError': loadingText.value = 'Cámara no encontrada'; loadingSubtext.value = 'Asegúrate de que tu dispositivo tiene una cámara.'; break;
+                        case 'NotReadableError': loadingText.value = 'Error de lectura'; loadingSubtext.value = 'La cámara ya está en uso por otra app.'; break;
+                        case 'OverconstrainedError': loadingText.value = 'Cámara no compatible'; loadingSubtext.value = 'Intentando con otra configuración.'; constraints.facingMode = undefined; break;
+                        default: loadingText.value = 'Error inesperado'; loadingSubtext.value = `Ocurrió un error: ${error.name}`;
+                    }
+                }
+                watch(selectedDeviceId, (newId, oldId) => {
+                    if (newId && oldId !== newId) {
+                        cameraReady.value = false;
+                        loadingText.value = 'Cambiando de cámara...';
+                        loadingSubtext.value = '';
+                        constraints.facingMode = undefined;
+                        constraints.deviceId = { exact: newId };
+                    }
+                });
+
+                // --- LÓGICA DE LA APLICACIÓN ---
+                function logout() {
+                    localStorage.removeItem('logisticaUser');
+                    window.location.href = 'login.html';
+                }
+
+                async function onDetect(detectedCodes) {
+                    const rawValue = detectedCodes[0]?.rawValue;
+                    if (!rawValue || pauseScan.value) return;
+
+                    pauseScan.value = true;
+                    try {
+                        const data = parseQRPayload(rawValue);
+                        if (!data) throw new Error('Código QR con formato no válido.');
+                        
+                        data.userId = currentUserId.value; 
+
+                        const response = await fetch('api/scan.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.message || 'Error del servidor.');
+                        
+                        showMessage(`✅ ${result.message}`, true);
+
+                    } catch (error) {
+                        showMessage(`⚠️ ${error.message}`, false);
+                    }
+                }
+
+                async function loadMyHistory() {
+                    showHistory.value = true;
+                    isLoadingHistory.value = true;
+                    myScans.value = [];
+                    try {
+                        const response = await fetch(`api/scan.php?userId=${currentUserId.value}`);
+                        if (!response.ok) throw new Error('No se pudo cargar el historial.');
+                        myScans.value = await response.json();
+                    } catch (error) {
+                        showMessage(`❌ ${error.message}`, false);
+                    } finally {
+                        isLoadingHistory.value = false;
+                    }
+                }
+
+                async function deleteScan(scanId) {
+                    if (!confirm('¿Estás seguro de que quieres eliminar este escaneo? Esta acción no se puede deshacer.')) {
+                        return;
+                    }
+                    try {
+                        const response = await fetch(`api/scan.php?id=${scanId}`, {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: currentUserId.value })
+                        });
+
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.message);
+
+                        myScans.value = myScans.value.filter(scan => scan.id !== scanId);
+                        showMessage('✅ Escaneo eliminado.', true);
+
+                    } catch(error) {
+                        showMessage(`❌ ${error.message}`, false);
+                    }
+                }
+
+                function parseQRPayload(raw) {
+                    const match = /UID:(\w+)\|ORDER:(\w+)\|DATETIME:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/.exec(raw);
+                    if (!match) return null;
+                    return { order: match[2], datetime: match[3] };
+                }
+                
+                function showMessage(text, success) {
+                    message.value = { text, success };
+                    if (navigator.vibrate) { navigator.vibrate(success ? [100] : [150, 50, 150]); }
+                    setTimeout(() => {
+                        message.value.text = '';
+                        pauseScan.value = false;
+                    }, 3000);
+                }
+
+                function formatDateTime(isoString) {
+                    if (!isoString) return 'N/A';
+                    try {
+                        return new Date(isoString).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+                    } catch { return 'Fecha inválida'; }
+                }
+
+                return {
+                    isLoggedIn, currentUserId, logout,
+                    message, pauseScan, cameraReady, devices, selectedDeviceId, constraints, showHistory,
+                    isLoadingHistory, myScans, loadingText, loadingSubtext,
+                    loadMyHistory, onCameraOn, onCameraError, onDetect, deleteScan, formatDateTime
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
